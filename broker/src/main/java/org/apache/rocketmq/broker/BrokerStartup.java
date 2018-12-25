@@ -108,6 +108,8 @@ public class BrokerStartup {
             }
 
             final BrokerConfig brokerConfig = new BrokerConfig();
+            brokerConfig.setRocketmqHome("/Users/qinpr/Documents/space/tech/rocketmq/distribution");
+            brokerConfig.setNamesrvAddr("localhost:9876");
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
 

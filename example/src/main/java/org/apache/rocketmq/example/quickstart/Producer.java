@@ -48,6 +48,8 @@ public class Producer {
         /*
          * Launch the instance.
          */
+        producer.setNamesrvAddr("localhost:9876");
+        producer.setInstanceName("Producer");
         producer.start();
 
         for (int i = 0; i < 1000; i++) {
@@ -58,7 +60,7 @@ public class Producer {
                  */
                 Message msg = new Message("TopicTest" /* Topic */,
                     "TagA" /* Tag */,
-                    ("Hello RocketMQ " + i).getBytes(RemotingHelper.DEFAULT_CHARSET) /* Message body */
+                    ("qinpr123 Hello RocketMQ " + i).getBytes(RemotingHelper.DEFAULT_CHARSET) /* Message body */
                 );
 
                 /*
