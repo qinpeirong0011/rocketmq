@@ -87,6 +87,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this(nettyServerConfig, null);
     }
 
+    /**
+     * remotingServer负责通信，
+     * 监听端口，收到broker、client等发过来的请求后，
+     * 根据请求的命令调用不通的processor来处理
+     */
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
         final ChannelEventListener channelEventListener) {
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());

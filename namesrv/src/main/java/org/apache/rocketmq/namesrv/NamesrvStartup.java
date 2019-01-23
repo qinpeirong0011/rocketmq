@@ -83,6 +83,8 @@ public class NamesrvStartup {
         namesrvConfig.setRocketmqHome("/Users/qinpr/Documents/space/tech/rocketmq/distribution");
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
         nettyServerConfig.setListenPort(9876);
+
+        // -c命令行参数用来指定配置文件的位置
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
@@ -98,7 +100,7 @@ public class NamesrvStartup {
                 in.close();
             }
         }
-
+        // -p命令行参数用来打印所有配置项的值
         if (commandLine.hasOption('p')) {
             InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_CONSOLE_NAME);
             MixAll.printObjectProperties(console, namesrvConfig);
@@ -143,7 +145,7 @@ public class NamesrvStartup {
             controller.shutdown();
             System.exit(-3);
         }
-
+        //设置一个jvm退出勾子函数 jvm退出时清理controller相关资源
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
             @Override
             public Void call() throws Exception {

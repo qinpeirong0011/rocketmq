@@ -64,7 +64,9 @@ public class NamesrvController {
         this.namesrvConfig = namesrvConfig;
         this.nettyServerConfig = nettyServerConfig;
         this.kvConfigManager = new KVConfigManager(this);
+        //路由信息、topic信息管理
         this.routeInfoManager = new RouteInfoManager();
+        //broker管理服务
         this.brokerHousekeepingService = new BrokerHousekeepingService(this);
         this.configuration = new Configuration(
             log,
@@ -75,15 +77,23 @@ public class NamesrvController {
 
     public boolean initialize() {
 
+        //加载KV配置
         this.kvConfigManager.load();
-
+        //初始化通信层
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
-
+        //初始化线程池（根据getServerWorkerThreads值，启动相应数量线程）
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        /**
+         * 此注册函数主要作用就是，定义RequestCode，用来作为netty的通信协议字段
+         * 即：如果broker通过netty发送通信请求，其中请求信息中带有code == RequestCode.REGISTER_BROKER，
+         * 那么在namesrv的netty端接收到该通信连接时候
+         * 则对应调用namesrv的DefaultRequestProcessor类下面的registerBroker方法，从而完成broker向namesrv注册
+         */
         this.registerProcessor();
 
+        //定时扫描失效的broker 定时每10s扫描broker信息，如果过期则移除
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -92,6 +102,7 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        //定时打印配置信息 定时每10s将configTable的信息记录到日志文件中
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
