@@ -53,10 +53,42 @@ public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * key:topic名称
+     * value: QueueData队列， 长度等于这个topic数据存储的master broker的个数
+     * QueueData: 存储着broker的名称、读写queue的数量、同步标识
+     */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+
+    /**
+     * brokerName为索引，相同名称的broker可能存在多台机器
+     * key: brokerName
+     * value: brokerName对应的属性信息。包括cluster名称，一个master broker和多个slave broker的地址信息
+     */
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+
+    /**
+     * 存储的是集群中cluster的信息
+     * key: 集群名称
+     * value: clusterName对应一个由brokerName组成的集合
+     */
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+
+    /**
+     * key: broker地址
+     * value: BrokerLiveInfo存储的内容是这台broker机器的实时状态
+     * 包括上次更新状态的时间戳
+     * 超时没有更新就认为这个broker无效，从broker列表里清除
+     */
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+
+    /**
+     * Filter Server是过滤服务器，是rocketmq的一种服务端过滤方式
+     * 一个broker可以有一个或多个filter server
+     * key: broker地址
+     * value: 和这个broker关联的多个Filter Server的地址
+     */
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
