@@ -93,6 +93,14 @@ public class NamesrvController {
          */
         this.registerProcessor();
 
+
+        /**
+         * nameserver状态维护逻辑有三处
+         * 1、NamesrvController.this.routeInfoManager.scanNotActiveBroker() 定时检查时间戳
+         * 2、BrokerHousekeepingService nameserver与broker连接断掉的时候，触发状态更新
+         * 3、DefaultRequestProcessor，根据broker上报的请求码，做相应的处理
+         */
+
         //定时扫描失效的broker 定时每10s扫描broker信息，如果过期则移除
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
