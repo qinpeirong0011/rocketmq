@@ -169,11 +169,12 @@ public class DefaultMessageStore implements MessageStore {
         boolean result = true;
 
         try {
+            //{user.host}/store/abort文件是否存在，这个文件在DefaultMessageStore启动时创建，在shutdown时删除，也就是如果该文件存在，说明不是正常的关闭
             boolean lastExitOK = !this.isTempFileExist();
             log.info("last shutdown {}", lastExitOK ? "normally" : "abnormally");
 
             if (null != scheduleMessageService) {
-                //加载delayOffset.json
+                //加载delayOffset.json，加载延迟消息启动
                 result = result && this.scheduleMessageService.load();
             }
 
@@ -184,11 +185,12 @@ public class DefaultMessageStore implements MessageStore {
             result = result && this.loadConsumeQueue();
 
             if (result) {
+                //文件存储检测点
                 this.storeCheckpoint =
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
-                //加载{user.host}/store/index目录索引文件
+                //加载{user.host}/store/index, 目录索引文件
                 this.indexService.load(lastExitOK);
-
+                //文件检测恢复, 验证commitlog、consumequeue、索引文件直接的一致性检测
                 this.recover(lastExitOK);
 
                 log.info("load over, and the max phy offset = {}", this.getMaxPhyOffset());
@@ -1277,14 +1279,17 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private void recover(final boolean lastExitOK) {
+        //恢复消息队列
         long maxPhyOffsetOfConsumeQueue = this.recoverConsumeQueue();
 
         if (lastExitOK) {
+            //正常退出，按照正常修复
             this.commitLog.recoverNormally(maxPhyOffsetOfConsumeQueue);
         } else {
+            //异常退出，走异常修复逻辑
             this.commitLog.recoverAbnormally(maxPhyOffsetOfConsumeQueue);
         }
-
+        //修复主题队列
         this.recoverTopicQueueTable();
     }
 
