@@ -104,25 +104,38 @@ public class BrokerController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final InternalLogger LOG_PROTECTION = InternalLoggerFactory.getLogger(LoggerName.PROTECTION_LOGGER_NAME);
     private static final InternalLogger LOG_WATER_MARK = InternalLoggerFactory.getLogger(LoggerName.WATER_MARK_LOGGER_NAME);
+    //服务端配置
     private final BrokerConfig brokerConfig;
+    //通信层配置
     private final NettyServerConfig nettyServerConfig;
     private final NettyClientConfig nettyClientConfig;
+    //存储层配置
     private final MessageStoreConfig messageStoreConfig;
+    //消费进度存储
     private final ConsumerOffsetManager consumerOffsetManager;
+    //consumer连接、订阅关系管理
     private final ConsumerManager consumerManager;
     private final ConsumerFilterManager consumerFilterManager;
+    //producer连接管理
     private final ProducerManager producerManager;
+    //检测所有客户端连接
     private final ClientHousekeepingService clientHousekeepingService;
     private final PullMessageProcessor pullMessageProcessor;
     private final PullRequestHoldService pullRequestHoldService;
     private final MessageArrivingListener messageArrivingListener;
+    //broker主动调用client
     private final Broker2Client broker2Client;
+    //订阅组配置管理
     private final SubscriptionGroupManager subscriptionGroupManager;
+    //订阅组内成员变换，立刻通知所有成员
     private final ConsumerIdsChangeListener consumerIdsChangeListener;
+    //管理队列的锁分配
     private final RebalanceLockManager rebalanceLockManager = new RebalanceLockManager();
+    //broker通信层客户端
     private final BrokerOuterAPI brokerOuterAPI;
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl(
         "BrokerControllerScheduledThread"));
+    //slave定期从master同步信息
     private final SlaveSynchronize slaveSynchronize;
     private final BlockingQueue<Runnable> sendThreadPoolQueue;
     private final BlockingQueue<Runnable> pullThreadPoolQueue;
@@ -132,17 +145,25 @@ public class BrokerController {
     private final BlockingQueue<Runnable> consumerManagerThreadPoolQueue;
     private final BlockingQueue<Runnable> endTransactionThreadPoolQueue;
     private final FilterServerManager filterServerManager;
+    //服务端状态管理
     private final BrokerStatsManager brokerStatsManager;
     private final List<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
     private final List<ConsumeMessageHook> consumeMessageHookList = new ArrayList<ConsumeMessageHook>();
+    //存储层对象
     private MessageStore messageStore;
+    //通信层对象
     private RemotingServer remotingServer;
     private RemotingServer fastRemotingServer;
+    //topic配置
     private TopicConfigManager topicConfigManager;
+    //处理发送消息的线程池
     private ExecutorService sendMessageExecutor;
+    //处理拉取消息的线程池
     private ExecutorService pullMessageExecutor;
     private ExecutorService queryMessageExecutor;
+    //处理管理broker的线程池
     private ExecutorService adminBrokerExecutor;
+    //处理管理client的线程池
     private ExecutorService clientManageExecutor;
     private ExecutorService heartbeatExecutor;
     private ExecutorService consumerManageExecutor;
@@ -220,19 +241,23 @@ public class BrokerController {
     }
 
     public boolean initialize() throws CloneNotSupportedException {
+        //加载topic配置信息 默认加载config\topics.json文件，若文件为空则加载config\topics.json.bak文件
         boolean result = this.topicConfigManager.load();
-
+        //加载consumer offset，默认加载config\consumerOffset.json文件，若文件为空则加载config\consumerOffset.json.bak文件
         result = result && this.consumerOffsetManager.load();
+        //加载consumer subscription，默认加载config\subscriptionGroup.json文件，若文件为空则加载config\subscriptionGroup.json.bak文件
         result = result && this.subscriptionGroupManager.load();
         result = result && this.consumerFilterManager.load();
 
+        //初始化消息存储，load储存的消息
         if (result) {
             try {
+                //初始化默认的DefaultMessageStore对象
                 this.messageStore =
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
                 this.brokerStats = new BrokerStats((DefaultMessageStore) this.messageStore);
-                //load plugin
+                //load plugin 加载插件，此处默认为空
                 MessageStorePluginContext context = new MessageStorePluginContext(messageStoreConfig, brokerStatsManager, messageArrivingListener, brokerConfig);
                 this.messageStore = MessageStoreFactory.build(context, this.messageStore);
                 this.messageStore.getDispatcherList().addFirst(new CommitLogDispatcherCalcBitMap(this.brokerConfig, this.consumerFilterManager));
@@ -242,13 +267,34 @@ public class BrokerController {
             }
         }
 
+        //加载本地消息数据
+        //      1.加载延迟delayOffset.json文件
+//        --加载config\delayOffset.json文件，若文件为空则加载config\delayOffset.json.bak文件
+//        --设置默认等级参数(1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h 4h 6h 12h 1d 2d)
+//      2.加载提交commitlog目录日志
+//        --commitlog目录下所有日志信息并写，刷新，提交的。例如：00000000000000000000文件
+//      3.加载consumequeue目录文件，消费队列
+//        --按照topic主题和设置的队列数来加载
+//      4.设置checkpoint文件位置信息
+//        --index目录下的所有文件
+//        --如果rocketmq非正常退出，则根据当前启动Checkpoint的时间和最后一次时间比较，若最后一次时间大于当前时间则直接删除该文件，否则保留文件
+//        --然后加载到索引文件集合中
+//        --恢复消费队列，如果是正常退出，所有的内存数据都将被刷新进行数据恢复，若非正常退出，恢复正常的数据，错误的数据则丢失
+//        --恢复topic队列，设置commitLog对象topic消费记录。例如：{topic_1-1=250, topic_1-0=250, topic_1-3=249, topic_1-2=251}
         result = result && this.messageStore.load();
 
         if (result) {
+            //初始化vip通道 fastRemotingServer 10909端口
+            /**
+             * 为什么叫做vip通道呢？因为rocketmq监听的这个端口的消息少一点，
+             * 特别是存储消息到磁盘的那块逻辑，vip通道是不会做的
+             * 所以个人觉得这个通道响应速度会快点。
+             */
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
+            //初始化线程池
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
                 this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -309,6 +355,7 @@ public class BrokerController {
 
             final long initialDelay = UtilAll.computNextMorningTimeMillis() - System.currentTimeMillis();
             final long period = 1000 * 60 * 60 * 24;
+            //每天凌晨记录一次昨天收发了多少消息
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -320,6 +367,7 @@ public class BrokerController {
                 }
             }, initialDelay, period, TimeUnit.MILLISECONDS);
 
+            //定时持久化消费进度
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -331,6 +379,7 @@ public class BrokerController {
                 }
             }, 1000 * 10, this.brokerConfig.getFlushConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
+            //持久化comsumer fileter，这些都是开始load的那些文档关联的
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -342,6 +391,7 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 10, TimeUnit.MILLISECONDS);
 
+            //定时清理消费太慢的消费者，以保护Broker
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -353,6 +403,7 @@ public class BrokerController {
                 }
             }, 3, 3, TimeUnit.MINUTES);
 
+            //打印发送消费线程运行状态
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -364,6 +415,7 @@ public class BrokerController {
                 }
             }, 10, 1, TimeUnit.SECONDS);
 
+            //打印分发消息比接收消息延迟多少
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                 @Override
@@ -376,6 +428,7 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
 
+            //定时获取Namesrv地址
             if (this.brokerConfig.getNamesrvAddr() != null) {
                 this.brokerOuterAPI.updateNameServerAddressList(this.brokerConfig.getNamesrvAddr());
                 log.info("Set user specified name server address: {}", this.brokerConfig.getNamesrvAddr());
@@ -393,6 +446,7 @@ public class BrokerController {
                 }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
             }
 
+            //如果当前broker是slave，那么定时从master同步消息；如果是master，那么定时打印slave和master差别
             if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
                 if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= 6) {
                     this.messageStore.updateHaMasterAddress(this.messageStoreConfig.getHaMasterAddress());

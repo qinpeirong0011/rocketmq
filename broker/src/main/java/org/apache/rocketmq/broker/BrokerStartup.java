@@ -58,6 +58,12 @@ public class BrokerStartup {
         start(createBrokerController(args));
     }
 
+    /**
+     * BrokerController创建完了之后，start就比较简单了，把创建的各种服务start起来。同时向所有的Namesrv注册自己
+     * 还要启动定时器，定时向所有的Namesrv注册自己，告诉Namesrv自己还活着，这样消息生产者和消费者就可以通过Namesrv找到自己
+     * @param controller
+     * @return
+     */
     public static BrokerController start(BrokerController controller) {
         try {
 
@@ -87,6 +93,15 @@ public class BrokerStartup {
         }
     }
 
+    /**
+     * 在完成createBrokerController后
+     * 1、和其他服务的通信管道建立了
+     * 2、之前存储的数据恢复了(topic, 消费进度，存储的消息)
+     * 3、启动了各种定时器，用来维护Broker的正常工作
+     * 4、如果是slave，那么就定时从master同步数据
+     * @param args
+     * @return
+     */
     public static BrokerController createBrokerController(String[] args) {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
@@ -107,15 +122,19 @@ public class BrokerStartup {
                 System.exit(-1);
             }
 
+            //服务端配置
             final BrokerConfig brokerConfig = new BrokerConfig();
             brokerConfig.setRocketmqHome("/Users/qinpr/Documents/space/tech/rocketmq/distribution");
             brokerConfig.setNamesrvAddr("localhost:9876");
+            //netty服务端配置
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+            //netty客户端配置
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
 
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
             nettyServerConfig.setListenPort(10911);
+            //存储层配置
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
 
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
@@ -123,6 +142,7 @@ public class BrokerStartup {
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
 
+            //如果有-c参数，后面一般带的是Broker启动脚本文件，那么就可以解析Broker启动配置文件
             if (commandLine.hasOption('c')) {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
@@ -180,6 +200,7 @@ public class BrokerStartup {
                     break;
             }
 
+            //存储层端口10912
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
