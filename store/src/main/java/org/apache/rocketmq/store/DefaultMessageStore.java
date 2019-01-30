@@ -177,16 +177,16 @@ public class DefaultMessageStore implements MessageStore {
                 result = result && this.scheduleMessageService.load();
             }
 
-            // load Commit Log
+            //加载{user.host}/store/commitlog
             result = result && this.commitLog.load();
 
-            // load Consume Queue
+            //加载{user.host}/store/consumequeue
             result = result && this.loadConsumeQueue();
 
             if (result) {
                 this.storeCheckpoint =
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
-
+                //加载{user.host}/store/index目录索引文件
                 this.indexService.load(lastExitOK);
 
                 this.recover(lastExitOK);
