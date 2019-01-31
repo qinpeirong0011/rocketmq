@@ -346,6 +346,9 @@ public class ConsumeQueueExt {
      *
      * @param maxAddress less than 0
      */
+    //再次遍历所有的MappedFile,如果无效的offset 大于 该consumeque,则无需处理
+    //如果无效的offset 小于该文件最大的偏移量，如果consumequeue的offset大于失效的offset,则该文件整个删除，
+    // 如果否，则设置wrotePosition,commitedPosition,flushedPoisition的值即可
     public void truncateByMaxAddress(final long maxAddress) {
         if (!isExtAddr(maxAddress)) {
             return;

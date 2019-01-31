@@ -1283,7 +1283,7 @@ public class DefaultMessageStore implements MessageStore {
         long maxPhyOffsetOfConsumeQueue = this.recoverConsumeQueue();
 
         if (lastExitOK) {
-            //正常退出，按照正常修复
+            //正常退出，按照正常修复 参考ConsumeQueue的恢复逻辑
             this.commitLog.recoverNormally(maxPhyOffsetOfConsumeQueue);
         } else {
             //异常退出，走异常修复逻辑
@@ -1312,6 +1312,7 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    //DefaultMessageStore#recoverConsumeQueue 主要要做的就是先移除非法的offset
     private long recoverConsumeQueue() {
         long maxPhysicOffset = -1;
         for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {

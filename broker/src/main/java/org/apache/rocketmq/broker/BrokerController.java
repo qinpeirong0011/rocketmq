@@ -111,7 +111,7 @@ public class BrokerController {
     private final NettyClientConfig nettyClientConfig;
     //存储层配置
     private final MessageStoreConfig messageStoreConfig;
-    //消费进度存储
+    //管理consumer消费进度存储
     private final ConsumerOffsetManager consumerOffsetManager;
     //consumer连接、订阅关系管理
     private final ConsumerManager consumerManager;
@@ -241,18 +241,24 @@ public class BrokerController {
     }
 
     public boolean initialize() throws CloneNotSupportedException {
+        //用于管理broker中存储的所有topic的配置
         //加载topic配置信息 默认加载config\topics.json文件，若文件为空则加载config\topics.json.bak文件
         boolean result = this.topicConfigManager.load();
+        //管理Consumer的消费进度
         //加载consumer offset，默认加载config\consumerOffset.json文件，若文件为空则加载config\consumerOffset.json.bak文件
         result = result && this.consumerOffsetManager.load();
+        //用来管理订阅组，包括订阅权限等
         //加载consumer subscription，默认加载config\subscriptionGroup.json文件，若文件为空则加载config\subscriptionGroup.json.bak文件
         result = result && this.subscriptionGroupManager.load();
+        //用于消费者过滤配置
+        //加载consumer filter manange，默认加载config\consumerFilter.json文件，若文件为空则加载config\consumerFilter.json文件
         result = result && this.consumerFilterManager.load();
 
         //初始化消息存储，load储存的消息
         if (result) {
             try {
                 //初始化默认的DefaultMessageStore对象
+                //用于broker层的消息落地存储
                 this.messageStore =
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
@@ -281,6 +287,16 @@ public class BrokerController {
 //        --然后加载到索引文件集合中
 //        --恢复消费队列，如果是正常退出，所有的内存数据都将被刷新进行数据恢复，若非正常退出，恢复正常的数据，错误的数据则丢失
 //        --恢复topic队列，设置commitLog对象topic消费记录。例如：{topic_1-1=250, topic_1-0=250, topic_1-3=249, topic_1-2=251}
+
+        /**
+         * 总结：
+         * 1、首先先加载相关文件到内存（内存映射文件）。包含Commitlog文件、ConsumeQueue文件、存储检测点（CheckPoint）文件、索引文件
+         * 2、执行文件恢复。引入临时文件abort来区分是否是异常启动机制，在存储管理启动时(DefaultMessageStore)创建abort文件，结束时(shutdown)会删除abort文件，也就是如果在启动的时候，如果发现存储在该临时文件，则认为是异常
+         * 恢复顺序：
+             1、先恢复consumeque文件，把不符合的consueme文件删除，一个consume条目正确的标准（commitlog偏移量 >0 size > 0）[从倒数第三个文件开始恢复]
+             2、如果abort文件存在，此时找到第一个正常的commitlog文件，然后对该文件重新进行转发，依次更新consumeque,index文件。
+         *
+         */
         result = result && this.messageStore.load();
 
         if (result) {
@@ -294,7 +310,7 @@ public class BrokerController {
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
             fastConfig.setListenPort(nettyServerConfig.getListenPort() - 2);
             this.fastRemotingServer = new NettyRemotingServer(fastConfig, this.clientHousekeepingService);
-            //初始化线程池
+            //发送消息的线程组
             this.sendMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getSendMessageThreadPoolNums(),
                 this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -302,7 +318,7 @@ public class BrokerController {
                 TimeUnit.MILLISECONDS,
                 this.sendThreadPoolQueue,
                 new ThreadFactoryImpl("SendMessageThread_"));
-
+            //设置拉取消息的线程组
             this.pullMessageExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getPullMessageThreadPoolNums(),
                 this.brokerConfig.getPullMessageThreadPoolNums(),
@@ -318,11 +334,11 @@ public class BrokerController {
                 TimeUnit.MILLISECONDS,
                 this.queryThreadPoolQueue,
                 new ThreadFactoryImpl("QueryMessageThread_"));
-
+            //broker管理器执行器
             this.adminBrokerExecutor =
                 Executors.newFixedThreadPool(this.brokerConfig.getAdminBrokerThreadPoolNums(), new ThreadFactoryImpl(
                     "AdminBrokerThread_"));
-
+            //客户端管理执行器
             this.clientManageExecutor = new ThreadPoolExecutor(
                 this.brokerConfig.getClientManageThreadPoolNums(),
                 this.brokerConfig.getClientManageThreadPoolNums(),
@@ -330,7 +346,7 @@ public class BrokerController {
                 TimeUnit.MILLISECONDS,
                 this.clientManagerThreadPoolQueue,
                 new ThreadFactoryImpl("ClientManageThread_"));
-
+            //心跳
             this.heartbeatExecutor = new BrokerFixedThreadPoolExecutor(
                 this.brokerConfig.getHeartbeatThreadPoolNums(),
                 this.brokerConfig.getHeartbeatThreadPoolNums(),
@@ -346,16 +362,16 @@ public class BrokerController {
                 TimeUnit.MILLISECONDS,
                 this.endTransactionThreadPoolQueue,
                 new ThreadFactoryImpl("EndTransactionThread_"));
-
+            //消费者管理线程组
             this.consumerManageExecutor =
                 Executors.newFixedThreadPool(this.brokerConfig.getConsumerManageThreadPoolNums(), new ThreadFactoryImpl(
                     "ConsumerManageThread_"));
-
+            //把刚刚创建的执行器注册到 remotingServer, fastRemotingServer对象中
             this.registerProcessor();
-
+            //定期查询如下信息
             final long initialDelay = UtilAll.computNextMorningTimeMillis() - System.currentTimeMillis();
             final long period = 1000 * 60 * 60 * 24;
-            //每天凌晨记录一次昨天收发了多少消息
+            //记录broker的状态 每天凌晨记录一次昨天收发了多少消息
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -367,7 +383,7 @@ public class BrokerController {
                 }
             }, initialDelay, period, TimeUnit.MILLISECONDS);
 
-            //定时持久化消费进度
+            //消费者当前信息的offset位置 定时持久化消费进度
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -379,7 +395,7 @@ public class BrokerController {
                 }
             }, 1000 * 10, this.brokerConfig.getFlushConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
-            //持久化comsumer fileter，这些都是开始load的那些文档关联的
+            //消费者filterManaer信息 持久化consumer filter，这些都是开始load的那些文档关联的
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -540,10 +556,12 @@ public class BrokerController {
         this.transactionalMessageCheckService = new TransactionalMessageCheckService(this);
     }
 
+    //注册处理器
     public void registerProcessor() {
         /**
          * SendMessageProcessor
          */
+        //SendMessageProcessor是生产者发送消息处理器，注册到nettyServer
         SendMessageProcessor sendProcessor = new SendMessageProcessor(this);
         sendProcessor.registerSendMessageHook(sendMessageHookList);
         sendProcessor.registerConsumeMessageHook(consumeMessageHookList);

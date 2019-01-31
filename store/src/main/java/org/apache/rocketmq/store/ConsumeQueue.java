@@ -150,9 +150,11 @@ public class ConsumeQueue {
 
             //processOffset 代表了当前consuemque有效的偏移量
             processOffset += mappedFileOffset;
+            //设置setFlushedWhere为当前有效的偏移量
             this.mappedFileQueue.setFlushedWhere(processOffset);
+            //设置setCommittedWhere为当前有效的偏移量
             this.mappedFileQueue.setCommittedWhere(processOffset);
-            //截断无效的consumeque文件
+            //截断无效的consumequeue文件
             this.mappedFileQueue.truncateDirtyFiles(processOffset);
 
             if (isExtReadEnable()) {
