@@ -210,6 +210,7 @@ public class TopicConfigManager extends ConfigManager {
         }
 
         if (createNew) {
+            //同步topic信息到nameserver
             this.brokerController.registerBrokerAll(false, true,true);
         }
 

@@ -315,6 +315,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         response.setCode(-1);
+        //重点关注 这里面会将topic的数据持久化，然后注册到nameserver
         super.msgCheck(ctx, requestHeader, response);
         if (response.getCode() != -1) {
             return response;
@@ -358,6 +359,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             }
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
         } else {
+            //重点关注 存储数据
             putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         }
 
