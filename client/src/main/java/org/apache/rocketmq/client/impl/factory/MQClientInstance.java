@@ -591,6 +591,7 @@ public class MQClientInstance {
             if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
                     TopicRouteData topicRouteData;
+                    //是否返回默认的topic。TBW102:是系统自带的，当broker启动的时候会将这个Topic的配置同步到namesrv，所以namesrv中一定是有这个信息的
                     if (isDefault && defaultMQProducer != null) {
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
@@ -602,33 +603,42 @@ public class MQClientInstance {
                             }
                         }
                     } else {
+                        //不符合默认，从nameserver获取路由的数据
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
+                        //从缓存中获取到老的路由等的信息
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        //比较一下是否发生了改变
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
+                            //如果未发生改变就得运行下面的参数，判断生产者和消费者是否可用，如果不可用，也算修改了，也就是changed=true
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
 
                         if (changed) {
+                            //不使用原来的信息，复制数据
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
 
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
+                                //设置broker的名字与地址信息
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
 
                             // Update Pub info
                             {
+                                //更新TopicPublishInfo中的数据
                                 TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
+                                //设置有topic的路由的信息
                                 publishInfo.setHaveTopicRouterInfo(true);
                                 Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();
                                 while (it.hasNext()) {
                                     Entry<String, MQProducerInner> entry = it.next();
                                     MQProducerInner impl = entry.getValue();
                                     if (impl != null) {
+                                        //更新product的路由信息等
                                         impl.updateTopicPublishInfo(topic, publishInfo);
                                     }
                                 }
@@ -642,6 +652,7 @@ public class MQClientInstance {
                                     Entry<String, MQConsumerInner> entry = it.next();
                                     MQConsumerInner impl = entry.getValue();
                                     if (impl != null) {
+                                        //更新consumer的路由信息等
                                         impl.updateTopicSubscribeInfo(topic, subscribeInfo);
                                     }
                                 }

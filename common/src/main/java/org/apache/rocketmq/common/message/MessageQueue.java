@@ -18,6 +18,10 @@ package org.apache.rocketmq.common.message;
 
 import java.io.Serializable;
 
+/**
+ * 消息队列包含了topic、brokerName(代理的名称)和queueId(队列的id)
+ * 也就是说这是确定消息要发送到那个broker中的那个队列中
+ */
 public class MessageQueue implements Comparable<MessageQueue>, Serializable {
     private static final long serialVersionUID = 6191200464116433425L;
     private String topic;
