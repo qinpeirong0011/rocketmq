@@ -547,6 +547,7 @@ public class CommitLog {
         String topic = msg.getTopic();
         int queueId = msg.getQueueId();
 
+        //获取消息类型(事务消息，非事务消息，Commit消息)
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
@@ -571,8 +572,9 @@ public class CommitLog {
 
         long eclipseTimeInLock = 0;
         MappedFile unlockMappedFile = null;
+        //获取一个MappedFile对象，内存映射的具体实现
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
-
+        //加锁
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
@@ -590,7 +592,7 @@ public class CommitLog {
                 beginTimeInLock = 0;
                 return new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null);
             }
-
+            //通过MappedFile对象写入文件
             result = mappedFile.appendMessage(msg, this.appendMessageCallback);
             switch (result.getStatus()) {
                 case PUT_OK:
@@ -638,8 +640,9 @@ public class CommitLog {
         // Statistics
         storeStatsService.getSinglePutMessageTopicTimesTotal(msg.getTopic()).incrementAndGet();
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
-
+        //根据刷盘策略刷盘
         handleDiskFlush(result, putMessageResult, msg);
+        //主从同步
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;

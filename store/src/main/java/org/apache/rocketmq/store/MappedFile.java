@@ -201,14 +201,16 @@ public class MappedFile extends ReferenceResource {
     public AppendMessageResult appendMessagesInner(final MessageExt messageExt, final AppendMessageCallback cb) {
         assert messageExt != null;
         assert cb != null;
-
+        //获取当前写入位置
         int currentPos = this.wrotePosition.get();
 
         if (currentPos < this.fileSize) {
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);
             AppendMessageResult result = null;
+            //根据消息类型，是批量消息还是单个消息，进入相应的处理
             if (messageExt instanceof MessageExtBrokerInner) {
+                //消息写入实现
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt);
             } else if (messageExt instanceof MessageExtBatch) {
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBatch) messageExt);

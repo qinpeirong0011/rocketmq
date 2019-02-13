@@ -62,44 +62,46 @@ import static org.apache.rocketmq.store.config.BrokerRole.SLAVE;
 
 public class DefaultMessageStore implements MessageStore {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    // 存储相关的配置
     private final MessageStoreConfig messageStoreConfig;
-    // CommitLog
+    // CommitLog 核心处理类，消息存储在commitlog文件中
     private final CommitLog commitLog;
-
+    //topic的消费队列
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
-
+    //ConsumeQueue刷盘服务线程
     private final FlushConsumeQueueService flushConsumeQueueService;
-
+    //定时清除服务现场
     private final CleanCommitLogService cleanCommitLogService;
-
+    //定时清除服务现场
     private final CleanConsumeQueueService cleanConsumeQueueService;
-
+    //索引服务
     private final IndexService indexService;
-
+    //MappedFile分配线程，RocketMQ使用内存映射处理commitlog,consumeQueue文件
     private final AllocateMappedFileService allocateMappedFileService;
-
+    //重试存储消息服务现场
     private final ReputMessageService reputMessageService;
-
+    //主从同步实现服务
     private final HAService haService;
-
+    //定时任务调度器，执行定时任务，主要是处理定时任务
     private final ScheduleMessageService scheduleMessageService;
-
+    //存储统计服务
     private final StoreStatsService storeStatsService;
-
+    //DataBuffer池
     private final TransientStorePool transientStorePool;
-
+    //存储服务状态
     private final RunningFlags runningFlags = new RunningFlags();
     private final SystemClock systemClock = new SystemClock();
 
     private final ScheduledExecutorService scheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
+    //Broker统计服务
     private final BrokerStatsManager brokerStatsManager;
+    //消息达到监听器
     private final MessageArrivingListener messageArrivingListener;
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
-
+    //检查点
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
@@ -340,21 +342,24 @@ public class DefaultMessageStore implements MessageStore {
             log.warn("putMessage message properties length too long " + msg.getPropertiesString().length());
             return new PutMessageResult(PutMessageStatus.PROPERTIES_SIZE_EXCEEDED, null);
         }
-
+        //检测操作系统页写入是否忙
         if (this.isOSPageCacheBusy()) {
             return new PutMessageResult(PutMessageStatus.OS_PAGECACHE_BUSY, null);
         }
 
         long beginTime = this.getSystemClock().now();
+        //将日志写入CommitLog文件
         PutMessageResult result = this.commitLog.putMessage(msg);
 
         long eclipseTime = this.getSystemClock().now() - beginTime;
         if (eclipseTime > 500) {
             log.warn("putMessage not in lock eclipse time(ms)={}, bodyLength={}", eclipseTime, msg.getBody().length);
         }
+        //记录相关统计信息
         this.storeStatsService.setPutMessageEntireTimeMax(eclipseTime);
 
         if (null == result || !result.isOk()) {
+            //记录写commitlog失败次数
             this.storeStatsService.getPutMessageFailedTimes().incrementAndGet();
         }
 
