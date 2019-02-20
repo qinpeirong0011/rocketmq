@@ -32,6 +32,7 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.store.config.BrokerRole;
 
 /**
+ * 一个专门用来实例化 MappedFile 文件的服务类
  * Create MappedFile in advance
  */
 public class AllocateMappedFileService extends ServiceThread {
@@ -191,6 +192,7 @@ public class AllocateMappedFileService extends ServiceThread {
                 }
 
                 // pre write mappedFile
+                //只有 MappedFile 的大小等于或大于 CommitLog 的大小并且开启文件预热功能才会预加载文件
                 if (mappedFile.getFileSize() >= this.messageStore.getMessageStoreConfig()
                     .getMapedFileSizeCommitLog()
                     &&

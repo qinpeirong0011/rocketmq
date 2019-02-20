@@ -205,7 +205,9 @@ public class MappedFile extends ReferenceResource {
         int currentPos = this.wrotePosition.get();
 
         if (currentPos < this.fileSize) {
+            //如果currentPos小于文件大小，通过slice()方法创建一个与MappedFile的共享内存区
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
+            //并设置position为当前指针
             byteBuffer.position(currentPos);
             AppendMessageResult result = null;
             //根据消息类型，是批量消息还是单个消息，进入相应的处理
