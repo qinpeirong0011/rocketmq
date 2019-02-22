@@ -78,7 +78,7 @@ public class DefaultMessageStore implements MessageStore {
     private final IndexService indexService;
     //MappedFile分配线程，RocketMQ使用内存映射处理commitlog,consumeQueue文件
     private final AllocateMappedFileService allocateMappedFileService;
-    //重试存储消息服务现场
+    //实时更新ConsumeQueue和IndexFile服务
     private final ReputMessageService reputMessageService;
     //主从同步实现服务
     private final HAService haService;
@@ -1727,7 +1727,8 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     class ReputMessageService extends ServiceThread {
-
+        //ReputMessageService从哪个物理地址偏移量开始转发消息给ConsumeQueue和IndexFile
+        //如果允许重复转发，reputFromOffset设置为CommitLog的提交指针；如果不允许重复转发，设置为CommitLog的内存最大便宜量
         private volatile long reputFromOffset = 0;
 
         public long getReputFromOffset() {

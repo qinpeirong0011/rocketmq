@@ -32,7 +32,7 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 public class MappedFileQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
-
+    //每次触发删除文件，最多删除多少个文件
     private static final int DELETE_FILES_BATCH_MAX = 10;
     //存储路劲
     private final String storePath;
